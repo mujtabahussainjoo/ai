@@ -1,0 +1,11 @@
+{
+  "extends": "@myaibuddy/shared-config/tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}
