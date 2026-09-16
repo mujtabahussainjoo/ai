@@ -29,10 +29,20 @@ export default function LoginView() {
     setError(null);
     setBusy(true);
     try {
-      if (which === 'admin') {
-        await login('admin@myaibuddy.dev', 'DevPass1234');
-      } else {
-        await register('callie@myaibuddy.dev', 'CalliePass1');
+      const email = which === 'admin' ? 'admin@myaibuddy.dev' : 'callie@myaibuddy.dev';
+      const password = which === 'admin' ? 'DevPass1234' : 'CalliePass1';
+      const displayName = which === 'admin' ? 'Admin' : 'Callie';
+      try {
+        await register(email, password, displayName);
+      } catch (regErr) {
+        if (
+          regErr instanceof Error &&
+          regErr.message.toLowerCase().includes('already exists')
+        ) {
+          await login(email, password);
+        } else {
+          throw regErr;
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Demo login failed');
