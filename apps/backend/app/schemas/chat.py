@@ -57,6 +57,10 @@ class ChatRequest(ProviderPreference):
     content: str = Field(min_length=1, max_length=20_000)
     stream: bool = False
     include_memory: bool = Field(default=True, description="Whether to use conversation history")
+    document_ids: list[uuid.UUID] | None = Field(
+        default=None,
+        description="Document IDs whose chunks should ground the RAG answer",
+    )
 
 
 class ChatResponse(BaseModel):

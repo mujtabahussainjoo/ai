@@ -17,6 +17,17 @@ export interface ConversationSummary {
   agent_kind?: string;
 }
 
+export interface DocumentSummary {
+  id: string;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number;
+  status: string;
+  chunk_count: number;
+  error_message: string | null;
+  created_at: string;
+}
+
 export interface MessageOut {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';

@@ -98,6 +98,31 @@ async def _build_messages(
     return msgs
 
 
+async def _build_document_context(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    document_ids: list[uuid.UUID],
+    query: str,
+) -> str:
+    """Retrieve relevant chunks and format them for injection into the system prompt."""
+    if not document_ids:
+        return ""
+    try:
+        from app.ai.rag.retrieval import format_context, retrieve_context  # noqa: PLC0415
+        from app.db.repositories.document import DocumentRepository  # noqa: PLC0415
+    except ImportError:
+        return ""
+    doc_repo = DocumentRepository(session)
+    doc_list, _ = await doc_repo.list_for_owner(user_id, page=1, page_size=500)
+    owned_ids = {d.id for d in doc_list}
+    valid_ids = [did for did in document_ids if did in owned_ids]
+    if not valid_ids:
+        return ""
+    items = await retrieve_context(session, document_ids=valid_ids, query=query)
+    return format_context(items)
+
+
 async def send_message(
     session: AsyncSession,
     *,
@@ -110,7 +135,16 @@ async def send_message(
     msg_repo = MessageRepository(session)
     user_msg = await msg_repo.add(conversation_id=conv.id, role="user", content=body.content)
     await session.flush()
-    prepared = await _build_messages(session, conv, body.content, include_memory=body.include_memory)
+    prepared = await _build_messages(
+        session, conv, body.content,
+        include_memory=body.include_memory,
+        document_context=await _build_document_context(
+            session,
+            user_id=user_id,
+            document_ids=body.document_ids or [],
+            query=body.content,
+        ),
+    )
     provider, provider_name = await build_resolved(session, preferred=body.provider, model=body.model)
     try:
         llm_response = await provider.chat(prepared)
@@ -159,7 +193,16 @@ async def stream_message(
     msg_repo = MessageRepository(session)
     user_msg = await msg_repo.add(conversation_id=conv.id, role="user", content=body.content)
     await session.flush()
-    prepared = await _build_messages(session, conv, body.content, include_memory=body.include_memory)
+    prepared = await _build_messages(
+        session, conv, body.content,
+        include_memory=body.include_memory,
+        document_context=await _build_document_context(
+            session,
+            user_id=user_id,
+            document_ids=body.document_ids or [],
+            query=body.content,
+        ),
+    )
     provider, provider_name = await build_resolved(session, preferred=body.provider, model=body.model)
     try:
         llm_response = await provider.chat(prepared)
@@ -190,5 +233,5 @@ async def stream_message(
         chunk = content[start : start + chunk_size]
         yield f"data: {json.dumps({'event': 'delta', 'content': chunk})}\n\n"
     out = MessageOut.model_validate(assistant_msg)
-    yield f"data: {json.dumps({'event': 'chat_end', 'message': out.model_dump(mode="json"), 'provider': provider_name, 'model': llm_response.model})}\n\n"
+    yield f"data: {json.dumps({'event': 'chat_end', 'message': out.model_dump(mode='json'), 'provider': provider_name, 'model': llm_response.model})}\n\n"
     await session.commit()
