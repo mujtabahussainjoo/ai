@@ -55,6 +55,55 @@ async def _ollama_reachable() -> bool:
     return reachable
 
 
+_EMBED_LIKE_MODEL_TOKENS = ("embed", "nomic", "mxbai", "bge", "mini", "minilm", "granite")
+
+
+def _model_base(name: str) -> str:
+    """Strip :tag suffix, e.g. 'llama3:latest' -> 'llama3'."""
+    return name.split(":", 1)[0]
+
+
+async def _ollama_available_models() -> list[str]:
+    """Cached list of model names from the Ollama server (/api/tags)."""
+    cached = _reachability_cache.get("ollama_models")
+    now = time.monotonic()
+    if cached and now - cached[0] < _REACHABILITY_TTL:
+        return cached[1]
+    models: list[str] = []
+    try:
+        import httpx  # noqa: PLC0415
+
+        async with httpx.AsyncClient(timeout=3) as client:
+            response = await client.get(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/tags")
+        if response.status_code == 200:
+            models = [str(m.get("name", "")) for m in response.json().get("models", [])]
+    except Exception:
+        models = []
+    _reachability_cache["ollama_models"] = (now, models)
+    return models
+
+
+async def _ollama_chat_model(preferred: str | None = None) -> str:
+    """Pick a chat-capable model that actually exists on the local/remote Ollama.
+
+    Prefers an explicitly configured model, then a known chat default, then the
+    first non-embedding model present. Fallback: llama3.2.
+    """
+    default = "llama3.2"
+    if preferred:
+        return preferred
+    models = await _ollama_available_models()
+    if not models:
+        return default
+    bases = [_model_base(m) for m in models]
+    if default in bases:
+        return default
+    candidates = [base for base in bases if not any(tok in base.lower() for tok in _EMBED_LIKE_MODEL_TOKENS)]
+    if candidates:
+        return candidates[0]
+    return models[0]
+
+
 async def get_provider_statuses(session: AsyncSession) -> list[ProviderStatus]:
     rows = (await session.execute(select(ProviderCredential))).scalars().all()
     by_name = {row.provider: row for row in rows}
@@ -334,9 +383,14 @@ async def resolve_provider(
             if row.provider == "mock":
                 mock_fallback = row
                 continue
+            resolved_model = (
+                row.model_chat or provider_meta(row.provider)[2]
+                if row.provider != "ollama"
+                else await _ollama_chat_model(row.model_chat or None)
+            )
             return ResolvedProvider(
                 name=row.provider,
-                model=model or row.model_chat or provider_meta(row.provider)[2],
+                model=model or resolved_model,
                 source="db",
             )
         logger.warning(
@@ -358,7 +412,11 @@ async def resolve_provider(
         if _env_api_key(env_name) and _is_usable_for_chat(env_name, api_key=_env_api_key(env_name), base_url=""):
             return ResolvedProvider(name=env_name, model=model or provider_meta(env_name)[2], source="env")
     if await _ollama_reachable():
-        return ResolvedProvider(name="ollama", model=model or provider_meta("ollama")[2], source="env")
+        return ResolvedProvider(
+            name="ollama",
+            model=model or await _ollama_chat_model(),
+            source="env",
+        )
     logger.info("provider_fallback", extra={"extra_fields": {"provider": "mock", "reason": "no usable provider"}})
     return ResolvedProvider(name="mock", model=model or provider_meta("mock")[2], source="default")
 
