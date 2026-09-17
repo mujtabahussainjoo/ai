@@ -9,12 +9,14 @@ import os
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import FileResponse, ORJSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -26,6 +28,10 @@ from app.core.logging import logger, request_id_var, setup_logging
 from app.db.session import dispose_engine
 
 SCHEMA_NAME = "BearerAuth"
+
+# Frontend build is copied here when using the combined Docker image. When the
+# directory exists, FastAPI serves it (API routes still take precedence).
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -101,6 +107,19 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(api_router, prefix=settings.API_PREFIX)
+
+    if STATIC_DIR.is_dir():
+        assets_dir = STATIC_DIR / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+        @app.get("/{path:path}", include_in_schema=False)
+        async def spa_fallback(path: str) -> FileResponse:
+            candidate = STATIC_DIR / path
+            if path and candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(STATIC_DIR / "index.html")
+
     return app
 
 
