@@ -1,0 +1,70 @@
+services:
+  - type: web
+    name: myaibuddy-backend
+    runtime: docker
+    region: singapore
+    plan: free
+    rootDir: .
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /openapi.json
+    envVars:
+      - key: APP_NAME
+        value: MyAIBuddy
+      - key: APP_ENV
+        value: production
+      - key: API_PREFIX
+        value: /api/v1
+      - key: LOG_LEVEL
+        value: INFO
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: myaibuddy-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: myaibuddy-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: myaibuddy-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: myaibuddy-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: myaibuddy-db
+          property: password
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://myaibuddy-frontend.onrender.com
+      - key: UPLOAD_DIR
+        value: /app/apps/backend/var/uploads
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: HUGGINGFACE_API_TOKEN
+        sync: false
+
+  - type: web
+    name: myaibuddy-frontend
+    runtime: static
+    region: singapore
+    plan: free
+    rootDir: apps/frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://myaibuddy-backend.onrender.com
+
+databases:
+  - name: myaibuddy-db
+    plan: free
+    region: singapore
