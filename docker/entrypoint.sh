@@ -79,5 +79,22 @@ PY
 echo "[entrypoint] Running migrations..."
 alembic upgrade head
 
+echo "[entrypoint] Seeding roles (idempotent)..."
+python - <<'PY'
+import asyncio
+
+from app.db.seeds import run_seeds
+from app.db.session import async_session_factory, dispose_engine
+
+async def seed() -> None:
+    async with async_session_factory() as session:
+        await run_seeds(session)
+        await session.commit()
+    await dispose_engine()
+    print("[entrypoint] Roles/permissions seeded", flush=True)
+
+asyncio.run(seed())
+PY
+
 echo "[entrypoint] Starting FastAPI..."
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
