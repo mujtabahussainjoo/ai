@@ -92,6 +92,8 @@ CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
 # =============================================================================
 FROM backend AS combined
 
-COPY --from=frontend-build /repo/apps/frontend/dist ./apps/backend/static
+# WORKDIR from the backend stage is /app/apps/backend, so use an absolute path
+# to place the SPA where app.main mounts it (STATIC_DIR => apps/backend/static).
+COPY --from=frontend-build /repo/apps/frontend/dist /app/apps/backend/static
 
 EXPOSE 8000

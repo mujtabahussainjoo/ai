@@ -114,7 +114,12 @@ def create_app() -> FastAPI:
             app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
         @app.get("/{path:path}", include_in_schema=False)
-        async def spa_fallback(path: str) -> FileResponse:
+        async def spa_fallback(path: str) -> Response:
+            if path.startswith(settings.API_PREFIX.lstrip("/")):
+                return ORJSONResponse(
+                    {"error": {"code": "http_error", "message": "Resource not found", "details": None}, "data": None},
+                    status_code=404,
+                )
             candidate = STATIC_DIR / path
             if path and candidate.is_file():
                 return FileResponse(candidate)
