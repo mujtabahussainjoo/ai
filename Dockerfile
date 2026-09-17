@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# ============================================================================
-# Stage 1: Build the frontend
-# ============================================================================
+# ============================================================
+# Stage 1: Build React frontend
+# ============================================================
 
 FROM node:20-alpine AS frontend-build
 
@@ -11,42 +11,22 @@ WORKDIR /repo
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-# Install and activate pnpm explicitly.
-RUN npm install -g corepack@latest \
-    && corepack enable pnpm \
-    && corepack prepare pnpm@10.15.0 --activate \
+RUN npm install -g pnpm@10.15.0 \
     && pnpm --version
 
-# Copy workspace metadata first.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-
-# Copy workspace package manifests.
 COPY packages ./packages
 COPY apps/frontend ./apps/frontend
 
-# Install dependencies and build the workspace.
 RUN pnpm install --frozen-lockfile
 RUN pnpm -r build
 
 
-# ============================================================================
-# Stage 2: Frontend runtime
-# ============================================================================
+# ============================================================
+# Stage 2: Run FastAPI and serve React
+# ============================================================
 
-FROM nginx:alpine AS frontend
-
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=frontend-build /repo/apps/frontend/dist /usr/share/nginx/html
-
-# Render/Railway inject PORT at runtime.
-CMD ["sh", "-c", "sed -i \"s/listen 80;/listen ${PORT:-8080};/\" /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
-
-
-# ============================================================================
-# Stage 3: Backend runtime
-# ============================================================================
-
-FROM python:3.12-slim AS backend
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -64,12 +44,15 @@ COPY requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-WORKDIR /app/apps/backend
+COPY apps/backend ./apps/backend
 
-COPY apps/backend ./
+# Copy the React production build into the backend image.
+COPY --from=frontend-build /repo/apps/frontend/dist ./apps/backend/static
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+WORKDIR /app/apps/backend
 
 ENTRYPOINT ["/entrypoint.sh"]
 
