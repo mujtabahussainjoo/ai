@@ -7,6 +7,7 @@ services:
     rootDir: .
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    dockerBuildTarget: backend
     healthCheckPath: /openapi.json
     envVars:
       - key: APP_NAME
@@ -58,10 +59,10 @@ services:
     region: singapore
     plan: free
     rootDir: apps/frontend
-    buildCommand: npm ci && npm run build
+    buildCommand: npm install -g pnpm@12.4.2 && pnpm install --frozen-lockfile && pnpm run build
     staticPublishPath: dist
     envVars:
-      - key: VITE_API_URL
+      - key: VITE_API_BASE_URL
         value: https://myaibuddy-backend.onrender.com
 
 databases:

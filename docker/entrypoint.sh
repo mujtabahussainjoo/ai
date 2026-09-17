@@ -7,11 +7,25 @@ python - <<'PY'
 import asyncio
 import os
 import sys
+from urllib.parse import quote_plus
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 database_url = os.getenv("DATABASE_URL")
+
+if not database_url:
+    # Derive from POSTGRES_* parts (same logic as app.core.config).
+    host = os.getenv("POSTGRES_HOST", "127.0.0.1")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    db = os.getenv("POSTGRES_DB", "myaibuddy")
+    user = os.getenv("POSTGRES_USER", "myaibuddy")
+    password = os.getenv("POSTGRES_PASSWORD", "")
+    database_url = (
+        f"postgresql+asyncpg://{user}:{quote_plus(password)}"
+        f"@{host}:{port}/{db}"
+    )
+    print(f"[entrypoint] Derived DATABASE_URL from POSTGRES_* vars (host={host}, port={port})")
 
 if not database_url:
     print("[entrypoint] ERROR: DATABASE_URL is not set.", file=sys.stderr)

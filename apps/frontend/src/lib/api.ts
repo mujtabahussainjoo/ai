@@ -1,4 +1,10 @@
-export const API_BASE = '/api/v1';
+const envBaseUrl = typeof import.meta !== 'undefined' && import.meta.env
+  ? (import.meta.env as Record<string, string>).VITE_API_BASE_URL
+  : '';
+
+export const API_BASE = envBaseUrl
+  ? `${envBaseUrl.replace(/\/+$/, '')}/api/v1`
+  : '/api/v1';
 
 export interface UserProfile {
   id: string;

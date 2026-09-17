@@ -12,6 +12,12 @@
 **/.env.*
 **/dist
 **/var/uploads
+**/var/pgdata
 *.log
 .DS_Store
 docs
+Makefile
+setup.sh
+README.md
+render.yml
+project-template.md

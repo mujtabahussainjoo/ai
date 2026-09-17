@@ -1,6 +1,7 @@
 from logging.config import fileConfig
 import asyncio
 import os
+from urllib.parse import quote_plus
 
 from alembic import context
 from sqlalchemy import pool
@@ -15,6 +16,18 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 database_url = os.environ.get("DATABASE_URL")
+
+if not database_url:
+    # Derive from POSTGRES_* parts (same logic as app.core.config).
+    host = os.environ.get("POSTGRES_HOST", "127.0.0.1")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+    db = os.environ.get("POSTGRES_DB", "myaibuddy")
+    user = os.environ.get("POSTGRES_USER", "myaibuddy")
+    password = os.environ.get("POSTGRES_PASSWORD", "")
+    database_url = (
+        f"postgresql+asyncpg://{user}:{quote_plus(password)}"
+        f"@{host}:{port}/{db}"
+    )
 
 if not database_url:
     raise RuntimeError("DATABASE_URL is not set")

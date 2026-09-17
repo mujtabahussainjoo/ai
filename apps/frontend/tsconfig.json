@@ -1,6 +1,7 @@
 {
   "extends": "@myaibuddy/shared-config/tsconfig.base.json",
   "compilerOptions": {
+    "noEmit": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": ["vite/client"],

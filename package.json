@@ -14,7 +14,12 @@
     "format": "pnpm -r format",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "db:migrate": "bash scripts/run-migrations.sh"
+    "setup": "bash setup.sh",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:status": "docker compose ps",
+    "urls": "make urls"
   },
   "devDependencies": {},
   "pnpm": {

@@ -1,25 +1,92 @@
 # MyAIBuddy
 
-A production-shaped AI workspace running fully on localhost (no Docker for the app itself).
+A production-shaped AI workspace: conversational assistant, RAG assistant grounded in
+your documents, web research agent with citations, and an all-rounder agent.
 
-It includes a conversational assistant, a RAG assistant grounded in your documents,
-a web research agent with citations, and an all-rounder agent that can read code,
-inspect repositories, run approved tests, and call allowlisted tools.
+## Quick start (Docker — recommended)
+
+```bash
+# 1. Configure once (creates .env from .env.example)
+cp .env.example .env
+#    Edit .env: set JWT_SECRET_KEY (production) + your AI provider keys
+
+# 2. Start everything (DB + backend + frontend) — auto-runs migrations
+bash setup.sh
+#    or
+make setup
+
+# 3. Open the URLs printed on startup:
+#    Frontend  http://localhost:8080
+#    Backend   http://localhost:8000
+#    Swagger   http://localhost:8000/docs
+```
+
+### Useful commands
+
+```bash
+make up          # start services
+make status      # show status + listening ports
+make logs        # tail all logs
+make urls        # print all URLs
+make stop        # stop everything
+make restart     # restart services
+make db-shell    # open PostgreSQL
+make db-migrate  # run migrations
+make db-reset    # wipe database (DESTRUCTIVE)
+```
+
+### All configuration lives in one file: `.env`
+
+The root `.env` controls every service — ports, database, auth, CORS, AI provider keys,
+RAG settings, rate limits. See `.env.example` for every option and its documentation.
+
+## Deploying frontend & backend separately
+
+Everything is containerized with named build targets, so you can deploy each part
+independently on any platform (AWS, Render, Fly.io, a VPS, …).
+
+```bash
+# Standalone backend image (FastAPI :8000)
+docker build --target backend -t myaibuddy-backend .
+docker run -p 8000:8000 --env-file .env myaibuddy-backend
+
+# Standalone frontend image (Nginx :80) — bake in the backend URL
+docker build --target frontend \
+  --build-arg VITE_API_BASE_URL=https://api.example.com \
+  -t myaibuddy-frontend .
+docker run -p 8080:80 myaibuddy-frontend
+```
+
+- `VITE_API_BASE_URL` is baked into the JS bundle so the SPA calls your external backend
+  directly (CORS must include the frontend origin). Leave it empty when using
+  docker-compose — Nginx proxies `/api`, `/docs`, `/openapi.json` to the backend.
+- Render: `render.yml` ships ready-to-go (backend + frontend + managed Postgres).
+- GitHub: `.github/workflows/` is ready for CI/CD builds.
 
 ## URLs
 
-| Service | URL | Notes |
-|---|---|---|
-| Frontend (web dashboard) | http://127.0.0.1:3000 | React + Vite SPA served on port 3000 |
-| Backend API | http://127.0.0.1:8000 | FastAPI on port 8000 |
-| Swagger UI (interactive API explorer) | http://127.0.0.1:8000/docs | Register/login, then Authorize with the access token |
-| ReDoc | http://127.0.0.1:8000/redoc | Read-only API reference |
-| OpenAPI JSON | http://127.0.0.1:8000/openapi.json | Machine-readable spec |
-| Health check | http://127.0.0.1:8000/api/v1/health | Returns 200 when the API is up |
-| Readiness | http://127.0.0.1:8000/api/v1/ready | Returns 200 when DB + app are ready |
+| Service | URL (docker) | URL (local dev) | Notes |
+|---|---|---|---|
+| Frontend (web dashboard) | http://localhost:8080 | http://127.0.0.1:5173 | React + Vite SPA (Nginx in Docker) |
+| Backend API | http://localhost:8000 | http://127.0.0.1:8000 | FastAPI on port 8000 |
+| Swagger UI | http://localhost:8000/docs | http://127.0.0.1:8000/docs | Register/login, then Authorize with the access token |
+| ReDoc | http://localhost:8000/redoc | http://127.0.0.1:8000/redoc | Read-only API reference |
+| OpenAPI JSON | http://localhost:8000/openapi.json | http://127.0.0.1:8000/openapi.json | Machine-readable spec |
+| Health check | http://localhost:8000/api/v1/health | http://127.0.0.1:8000/api/v1/health | Returns 200 when the API is up |
+| Readiness | http://localhost:8000/api/v1/ready | http://127.0.0.1:8000/api/v1/ready | Returns 200 when DB + app are ready |
 
-> Note: the default Vite port is 5173, but on this machine port 5173 has a stale
-> socket with no owning process, so the frontend runs on **port 3000** instead.
+> The ports above come from `.env` (`FRONTEND_PORT`, `BACKEND_PORT`, `DB_PORT`) and can
+> be changed there. Docker-compose prints the live URLs on startup.
+
+## Local development (without Docker — legacy flow)
+
+```bash
+# Backend (API + AI service)
+(cd apps/backend && pnpm dev)   # or: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Frontend (web dashboard)
+(cd apps/frontend && pnpm dev)  # served on http://127.0.0.1:5173, proxies /api -> :8000
+```
 
 ## API endpoints (`/api/v1`)
 
@@ -68,22 +135,6 @@ inspect repositories, run approved tests, and call allowlisted tools.
 |---|---|---|
 | GET | `/health` | Liveness probe |
 | GET | `/ready` | Readiness (checks DB) |
-
-## Quick start
-
-```bash
-# One-time environment setup (installs dependencies, backend venv, initializes DB)
-./scripts/setup-local.sh
-
-# Run migrations
-./scripts/run-migrations.sh
-
-# Backend (API + AI service)
-(cd apps/backend && pnpm dev)   # or: uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# Frontend (web dashboard)
-(cd apps/frontend && pnpm dev)  # served on http://127.0.0.1:3000
-```
 
 ## Using Swagger (http://127.0.0.1:8000/docs)
 
