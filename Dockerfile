@@ -11,7 +11,7 @@ WORKDIR /repo
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-RUN npm install -g pnpm@10.15.0 \
+RUN npm install -g pnpm@12.4.2 \
     && pnpm --version
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
