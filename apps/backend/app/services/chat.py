@@ -114,9 +114,9 @@ async def _build_document_context(
     except ImportError:
         return ""
     doc_repo = DocumentRepository(session)
-    doc_list, _ = await doc_repo.list_for_owner(user_id, page=1, page_size=500)
-    owned_ids = {d.id for d in doc_list}
-    valid_ids = [did for did in document_ids if did in owned_ids]
+    doc_list, _ = await doc_repo.list_all(page=1, page_size=500)
+    available_ids = {d.id for d in doc_list}
+    valid_ids = [did for did in document_ids if did in available_ids]
     if not valid_ids:
         return ""
     items = await retrieve_context(session, document_ids=valid_ids, query=query)

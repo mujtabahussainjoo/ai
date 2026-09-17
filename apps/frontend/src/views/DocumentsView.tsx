@@ -16,6 +16,7 @@ const ACCEPTED = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.csv,.json';
 
 export default function DocumentsView() {
   const { user, token } = useAuth();
+  const isAdmin = (user?.roles ?? []).includes('admin');
   const [docs, setDocs] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -39,6 +40,10 @@ export default function DocumentsView() {
     const input = event.currentTarget.elements.namedItem('file') as HTMLInputElement;
     const file = input.files?.[0];
     if (!file || !token) return;
+    if (file.size > 50 * 1024 * 1024) {
+      setError('File exceeds the 50 MB upload limit');
+      return;
+    }
     setUploading(true);
     setError(null);
     const form = new FormData();
@@ -58,6 +63,23 @@ export default function DocumentsView() {
       input.value = '';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deleteDoc = async (doc: DocumentSummary) => {
+    if (!token) return;
+    if (!window.confirm(`Delete "${doc.title}"? This removes it from the shared knowledge base.`)) {
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      await api.del(`/documents/${doc.id}`, token);
+      setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setUploading(false);
     }
@@ -94,32 +116,39 @@ export default function DocumentsView() {
       </div>
 
       <div className="mb-8 max-w-3xl">
-        <form onSubmit={upload} className="mab-panel rounded-xl border border-mab-border p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="file"
-              name="file"
-              accept={ACCEPTED}
-              className="block max-w-xs text-sm"
-              required
-            />
-            <button
-              type="submit"
-              className="mab-btn mab-btn-primary mab-btn-md"
-              disabled={uploading}
-            >
-              {uploading ? 'Uploading…' : 'Upload'}
-            </button>
-          </div>
-          <p className="mab-hint mt-2">
-            PDF (incl. scanned), Word, PowerPoint, Excel, TXT, Markdown, CSV, JSON. Max 50 MB.
-          </p>
-          {error && (
-            <p className="mab-error mt-2" role="alert">
-              {error}
+        {isAdmin ? (
+          <form onSubmit={upload} className="mab-panel rounded-xl border border-mab-border p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="file"
+                name="file"
+                accept={ACCEPTED}
+                className="block max-w-xs text-sm"
+                required
+              />
+              <button
+                type="submit"
+                className="mab-btn mab-btn-primary mab-btn-md"
+                disabled={uploading}
+              >
+                {uploading ? 'Uploading…' : 'Upload'}
+              </button>
+            </div>
+            <p className="mab-hint mt-2">
+              PDF (incl. scanned), Word, PowerPoint, Excel, TXT, Markdown, CSV, JSON. Max 50 MB.
             </p>
-          )}
-        </form>
+            {error && (
+              <p className="mab-error mt-2" role="alert">
+                {error}
+              </p>
+            )}
+          </form>
+        ) : (
+          <p className="mab-hint">
+            You're viewing documents as <strong>{user?.email}</strong>. Only admins can upload or
+            delete documents — you can browse the shared knowledge base and chat over it.
+          </p>
+        )}
       </div>
 
       <div className="max-w-3xl space-y-2">
@@ -127,7 +156,7 @@ export default function DocumentsView() {
           <p className="mab-subtle text-sm">No documents yet.</p>
         ) : (
           docs.map((doc) => (
-            <div key={doc.id} className="mab-panel flex items-center justify-between rounded-lg border border-mab-border px-4 py-3">
+            <div key={doc.id} className="mab-panel flex items-center justify-between gap-3 rounded-lg border border-mab-border px-4 py-3">
               <div className="flex items-center gap-3">
                 <span className="text-xl">📄</span>
                 <div>
@@ -137,7 +166,19 @@ export default function DocumentsView() {
                   </div>
                 </div>
               </div>
-              <span className="mab-badge mab-badge-neutral">{doc.status}</span>
+              <div className="flex items-center gap-2">
+                <span className="mab-badge mab-badge-neutral">{doc.status}</span>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="mab-btn mab-btn-danger mab-btn-sm"
+                    disabled={uploading}
+                    onClick={() => deleteDoc(doc)}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           ))
         )}

@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps.auth import get_current_user
+from app.api.v1.deps.auth import get_current_user, require_admin
 from app.core.config import settings
 from app.core.limits import limiter
 from app.db.models import User
@@ -28,9 +28,7 @@ async def list_documents(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    docs, total = await DocumentRepository(db).list_for_owner(
-        current_user.id, page=page, page_size=page_size
-    )
+    docs, total = await DocumentRepository(db).list_all(page=page, page_size=page_size)
     items = []
     for doc in docs:
         row = DocumentSummaryOut.model_validate(doc).model_dump(mode="json")
@@ -52,7 +50,7 @@ async def list_documents(
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     result = await documents_service.save_upload(
@@ -70,12 +68,11 @@ async def upload_document(
 @router.delete("/{document_id}", response_model=dict[str, Any])
 async def delete_document(
     document_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await documents_service.delete_document(
         db,
-        owner_id=current_user.id,
         document_id=uuid.UUID(document_id),
     )
     return envelope({"status": "ok"})

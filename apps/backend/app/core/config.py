@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 70
     RETRIEVAL_TOP_K: int = 6
     RETRIEVAL_MIN_SCORE: float = 0.10
-    MAX_UPLOAD_MB: int = 25
+    MAX_UPLOAD_MB: int = 50
     UPLOAD_DIR: str = "var/uploads"
 
     # Rate limits

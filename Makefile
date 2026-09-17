@@ -123,6 +123,13 @@ db-reset: ## Reset database (DELETES ALL DATA)
 	$(COMPOSE) up -d backend
 	@echo "Database reset complete. Backend will run migrations on startup."
 
+.PHONY: create-admin
+create-admin: ## Create (or promote) an admin account: EMAIL=... PASSWORD=... make create-admin
+	$(COMPOSE) exec -T backend python scripts/create_admin.py \
+		--email $${EMAIL:-admin@myaibuddy.dev} \
+		--password $${PASSWORD:-Admin@1234} \
+		--display-name $${DISPLAY_NAME:-Admin}
+
 # =============================================================================
 # Build (Standalone)
 # =============================================================================

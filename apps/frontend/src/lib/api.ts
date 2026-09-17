@@ -83,6 +83,15 @@ export interface ThirdPartyApi {
   updated_at: string;
 }
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  display_name: string | null;
+  roles: string[];
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface Paginated<T> {
   items: T[];
   page: number;
@@ -103,7 +112,7 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   token?: string | null;
 }
@@ -143,5 +152,7 @@ export const api = {
     request<T>(path, { method: 'POST', body, token }),
   put: <T>(path: string, body: unknown, token?: string | null) =>
     request<T>(path, { method: 'PUT', body, token }),
+  patch: <T>(path: string, body: unknown, token?: string | null) =>
+    request<T>(path, { method: 'PATCH', body, token }),
   del: <T>(path: string, token?: string | null) => request<T>(path, { method: 'DELETE', token }),
 };

@@ -39,6 +39,23 @@ class DocumentRepository(BaseRepository[Document]):
         )
         return items, total
 
+    async def list_all(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Document], int]:
+        """Shared knowledge-base listing: every non-deleted document, newest first."""
+        filters = [Document.deleted_at.is_(None)]
+        items, total = await self.paginate(
+            filters=filters,
+            sort_by="created_at",
+            sort_order="desc",
+            page=page,
+            page_size=page_size,
+        )
+        return items, total
+
     async def soft_delete(self, document: Document) -> None:
         document.deleted_at = datetime.now(UTC)
         document.status = "deleted"

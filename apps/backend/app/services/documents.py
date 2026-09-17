@@ -16,7 +16,7 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import PayloadTooLargeError, ValidationError
+from app.core.exceptions import NotFoundError, PayloadTooLargeError, ValidationError
 from app.core.logging import logger
 from app.db.models import Document, DocumentChunk
 
@@ -208,12 +208,14 @@ async def reingest_document(session: AsyncSession, document: Document) -> Ingest
     return IngestionResult(document=document, chunk_count=chunk_count)
 
 
-async def delete_document(session: AsyncSession, *, owner_id: uuid.UUID, document_id: uuid.UUID) -> None:
-    """Soft-delete a document row and remove its file from disk."""
+async def delete_document(session: AsyncSession, *, document_id: uuid.UUID) -> None:
+    """Soft-delete a document row and remove its file from disk. Admin-scoped."""
     from app.db.repositories.document import DocumentChunkRepository, DocumentRepository
 
     repo = DocumentRepository(session)
-    document = await repo.get_owned(owner_id, document_id)
+    document = await repo.get(document_id)
+    if document is None or document.deleted_at is not None:
+        raise NotFoundError("Document not found")
     await repo.soft_delete(document)
     await DocumentChunkRepository(session).delete_for_document(document.id)
 

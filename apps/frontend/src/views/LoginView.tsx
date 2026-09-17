@@ -31,19 +31,7 @@ export default function LoginView() {
     try {
       const email = which === 'admin' ? 'admin@myaibuddy.dev' : 'callie@myaibuddy.dev';
       const password = which === 'admin' ? 'DevPass1234' : 'CalliePass1';
-      const displayName = which === 'admin' ? 'Admin' : 'Callie';
-      try {
-        await register(email, password, displayName);
-      } catch (regErr) {
-        if (
-          regErr instanceof Error &&
-          regErr.message.toLowerCase().includes('already exists')
-        ) {
-          await login(email, password);
-        } else {
-          throw regErr;
-        }
-      }
+      await login(email, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Demo login failed');
     } finally {
@@ -152,7 +140,7 @@ export default function LoginView() {
               disabled={Boolean(demoToken)}
               onClick={() => tryDemo('user')}
             >
-              {demoToken === 'user' ? 'Creating…' : 'User demo'}
+              {demoToken === 'user' ? 'Signing in…' : 'User demo'}
             </button>
           </div>
         </div>

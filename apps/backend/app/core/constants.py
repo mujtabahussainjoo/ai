@@ -41,7 +41,7 @@ DOCUMENT_MIME_ALLOWED = {
 IMAGE_MIME_ALLOWED = {"image/png", "image/jpeg", "image/webp", "image/tiff"}
 
 # Size limits
-MAX_UPLOAD_BYTES_DEFAULT = 25 * 1024 * 1024  # honor settings.MAX_UPLOAD_MB
+MAX_UPLOAD_BYTES_DEFAULT = 50 * 1024 * 1024  # honor settings.MAX_UPLOAD_MB
 
 # Agent tool policy
 TOOL_CATEGORY_READ = "read"

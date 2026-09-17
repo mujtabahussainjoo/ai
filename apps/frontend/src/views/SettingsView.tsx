@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from '../lib/store';
-import { api, ApiError, type LogEntry, type ProviderStatus, type ThirdPartyApi } from '../lib/api';
+import {
+  api,
+  ApiError,
+  type AdminUser,
+  type LogEntry,
+  type ProviderStatus,
+  type ThirdPartyApi,
+} from '../lib/api';
 
 interface ProviderForm {
   api_key: string;
@@ -19,6 +26,20 @@ interface IntegrationForm {
   enabled: boolean;
 }
 
+interface AdminUserForm {
+  email: string;
+  password: string;
+  display_name: string;
+  roles: string[];
+}
+
+interface AdminEditForm {
+  display_name: string;
+  password: string;
+  roles: string[];
+  is_active: boolean;
+}
+
 function emptyForm(): ProviderForm {
   return { api_key: '', base_url: '', default_model: '', model_chat: '' };
 }
@@ -32,6 +53,19 @@ function emptyIntegrationForm(): IntegrationForm {
     api_key: '',
     code: '',
     enabled: true,
+  };
+}
+
+function emptyUserForm(): AdminUserForm {
+  return { email: '', password: '', display_name: '', roles: ['user'] };
+}
+
+function emptyEditForm(item?: AdminUser): AdminEditForm {
+  return {
+    display_name: item?.display_name ?? '',
+    password: '',
+    roles: item?.roles?.length ? [...item.roles] : ['admin'],
+    is_active: item?.is_active ?? true,
   };
 }
 
@@ -58,6 +92,17 @@ export default function SettingsView() {
   const [integrBusy, setIntegrBusy] = useState<string | null>(null);
   const [integrSaved, setIntegrSaved] = useState<string | null>(null);
 
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userForm, setUserForm] = useState<AdminUserForm>(emptyUserForm());
+  const [userSaving, setUserSaving] = useState(false);
+  const [userSaved, setUserSaved] = useState<string | null>(null);
+  const [userBusy, setUserBusy] = useState<string | null>(null);
+
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<AdminEditForm>(() => emptyEditForm());
+  const [editSaving, setEditSaving] = useState(false);
+
   const isAdmin = (user?.roles ?? []).includes('admin');
 
   const refresh = async () => {
@@ -75,6 +120,106 @@ export default function SettingsView() {
       setError(err instanceof ApiError ? err.message : 'Could not load API integrations');
     } finally {
       setIntegrationsLoading(false);
+    }
+  };
+
+  const refreshUsers = async () => {
+    if (!token || !isAdmin) return;
+    setUsersLoading(true);
+    try {
+      const list = await api.get<AdminUser[]>('/admin/users', token);
+      setUsers(list);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load users');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const submitUser = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!token || !isAdmin) return;
+    setUserSaving(true);
+    setError(null);
+    setUserSaved(null);
+    try {
+      const body: Record<string, unknown> = {
+        email: userForm.email.trim(),
+        password: userForm.password,
+        roles: userForm.roles,
+      };
+      if (userForm.display_name.trim()) body.display_name = userForm.display_name.trim();
+      await api.post<AdminUser>('/admin/users', body, token);
+      setUserSaved('Created');
+      setUserForm(emptyUserForm());
+      await refreshUsers();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not create user');
+    } finally {
+      setUserSaving(false);
+    }
+  };
+
+  const deactivateUser = async (item: AdminUser) => {
+    if (!token || !isAdmin) return;
+    if (!window.confirm(`Deactivate ${item.email}? They will no longer be able to log in.`)) return;
+    setUserBusy(item.id);
+    setError(null);
+    try {
+      await api.del(`/admin/users/${item.id}`, token);
+      await refreshUsers();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not deactivate user');
+    } finally {
+      setUserBusy(null);
+    }
+  };
+
+  const startEditUser = (item: AdminUser) => {
+    setEditForm(emptyEditForm(item));
+    setEditingUserId(item.id);
+    setError(null);
+  };
+
+  const cancelEditUser = () => {
+    setEditingUserId(null);
+    setError(null);
+  };
+
+  const saveEditUser = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!token || !isAdmin || !editingUserId) return;
+    setEditSaving(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = {
+        display_name: editForm.display_name.trim(),
+        roles: editForm.roles,
+        is_active: editForm.is_active,
+      };
+      if (editForm.password.trim()) body.password = editForm.password.trim();
+      await api.patch<AdminUser>(`/admin/users/${editingUserId}`, body, token);
+      setEditingUserId(null);
+      await refreshUsers();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not update user');
+      setEditSaving(false);
+      return;
+    }
+    setEditSaving(false);
+  };
+
+  const reactivateUser = async (item: AdminUser) => {
+    if (!token || !isAdmin) return;
+    setUserBusy(item.id);
+    setError(null);
+    try {
+      await api.patch<AdminUser>(`/admin/users/${item.id}`, { is_active: true }, token);
+      await refreshUsers();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reactivate user');
+    } finally {
+      setUserBusy(null);
     }
   };
 
@@ -106,6 +251,10 @@ export default function SettingsView() {
   }, [token, isAdmin]);
 
   useEffect(() => {
+    if (token && isAdmin) void refreshUsers();
+  }, [token, isAdmin]);
+
+  useEffect(() => {
     if (token) void refreshIntegrations();
   }, [token]);
 
@@ -121,7 +270,7 @@ export default function SettingsView() {
   };
 
   const pokeProvider = async (name: string, body: Record<string, unknown>) => {
-    if (!token) return;
+    if (!token || !isAdmin) return;
     setBusy(name);
     setError(null);
     try {
@@ -144,7 +293,7 @@ export default function SettingsView() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!editing || !token) return;
+    if (!editing || !token || !isAdmin) return;
     setSaving(true);
     setError(null);
     setSaved(null);
@@ -194,7 +343,7 @@ export default function SettingsView() {
 
   const submitIntegration = async (event: FormEvent) => {
     event.preventDefault();
-    if (!editingIntegration || !token) return;
+    if (!editingIntegration || !token || !isAdmin) return;
     setIntegrSaving(true);
     setError(null);
     setIntegrSaved(null);
@@ -225,7 +374,7 @@ export default function SettingsView() {
   };
 
   const deleteIntegration = async (item: ThirdPartyApi) => {
-    if (!token) return;
+    if (!token || !isAdmin) return;
     setIntegrBusy(item.id);
     setError(null);
     try {
@@ -564,6 +713,297 @@ export default function SettingsView() {
           )}
         </div>
       </section>
+
+      {isAdmin && (
+        <section className="mt-10 max-w-3xl">
+          <div className="mb-3">
+            <h2 className="mab-heading mb-1 text-lg">Users &amp; roles</h2>
+            <p className="mab-subtle text-sm">
+              Create accounts and assign roles. A user without the{' '}
+              <code className="font-mono text-xs">admin</code> role can view settings and documents
+              but can not change anything. Passwords must be at least 8 characters with an uppercase
+              letter and a digit.
+            </p>
+          </div>
+
+          <form
+            onSubmit={submitUser}
+            className="mab-panel mb-4 rounded-xl border border-mab-border p-4"
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="mab-field">
+                <label className="mab-label">Email *</label>
+                <input
+                  type="email"
+                  className="mab-input"
+                  placeholder="name@example.com"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="mab-field">
+                <label className="mab-label">Display name</label>
+                <input
+                  type="text"
+                  className="mab-input"
+                  placeholder="Jane Doe"
+                  value={userForm.display_name}
+                  onChange={(e) => setUserForm({ ...userForm, display_name: e.target.value })}
+                />
+              </div>
+              <div className="mab-field">
+                <label className="mab-label">Password *</label>
+                <input
+                  type="password"
+                  className="mab-input"
+                  placeholder="e.g. Admin@1234"
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="mab-field">
+                <label className="mab-label">Roles</label>
+                <div className="flex gap-4 pt-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mab-checkbox"
+                      checked={userForm.roles.includes('admin')}
+                      onChange={(e) =>
+                        setUserForm({
+                          ...userForm,
+                          roles: e.target.checked
+                            ? [...userForm.roles, 'admin']
+                            : userForm.roles.filter((r) => r !== 'admin'),
+                        })
+                      }
+                    />
+                    admin
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mab-checkbox"
+                      checked={userForm.roles.includes('user')}
+                      onChange={(e) =>
+                        setUserForm({
+                          ...userForm,
+                          roles: e.target.checked
+                            ? [...userForm.roles, 'user']
+                            : userForm.roles.filter((r) => r !== 'user'),
+                        })
+                      }
+                    />
+                    user
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                className="mab-btn mab-btn-primary mab-btn-md"
+                disabled={userSaving}
+              >
+                {userSaving ? 'Creating…' : '+ Create user'}
+              </button>
+              {userSaved && <span className="text-sm text-green-400">{userSaved}</span>}
+            </div>
+          </form>
+
+          <div className="space-y-2">
+            {usersLoading && users.length === 0 ? (
+              <p className="mab-subtle text-sm">Loading users…</p>
+            ) : users.length === 0 ? (
+              <p className="mab-subtle text-sm">No users found.</p>
+            ) : (
+              users.map((u) =>
+                editingUserId === u.id ? (
+                  <form
+                    key={u.id}
+                    onSubmit={saveEditUser}
+                    className="mab-panel rounded-lg border border-mab-border px-4 py-3"
+                  >
+                    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                      <div className="text-sm font-medium">{u.display_name || u.email}</div>
+                      <div className="text-xs text-mab-muted">{u.email}</div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="mab-field">
+                        <label className="mab-label">Display name</label>
+                        <input
+                          type="text"
+                          className="mab-input"
+                          value={editForm.display_name}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, display_name: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="mab-field">
+                        <label className="mab-label">
+                          New password (leave blank to keep current)
+                        </label>
+                        <input
+                          type="password"
+                          className="mab-input"
+                          placeholder="Password@123"
+                          value={editForm.password}
+                          onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                        />
+                        <p className="mab-subtle mt-1 text-xs">
+                          At least 8 chars, one uppercase letter, one digit.
+                        </p>
+                      </div>
+                      <div className="mab-field">
+                        <label className="mab-label">Roles</label>
+                        <div className="flex gap-4 pt-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="mab-checkbox"
+                              checked={editForm.roles.includes('admin')}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  roles: e.target.checked
+                                    ? [...editForm.roles, 'admin']
+                                    : editForm.roles.filter((r) => r !== 'admin'),
+                                })
+                              }
+                            />
+                            admin
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="mab-checkbox"
+                              checked={editForm.roles.includes('user')}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  roles: e.target.checked
+                                    ? [...editForm.roles, 'user']
+                                    : editForm.roles.filter((r) => r !== 'user'),
+                                })
+                              }
+                            />
+                            user
+                          </label>
+                        </div>
+                        <p className="mab-subtle mt-1 text-xs">
+                          {u.email === user?.email
+                            ? 'Your own admin role cannot be removed.'
+                            : 'Roles take effect on their next request.'}
+                        </p>
+                      </div>
+                      <div className="mab-field">
+                        <label className="mab-label">Account status</label>
+                        <div className="pt-2">
+                          <select
+                            className="mab-input"
+                            value={editForm.is_active ? 'active' : 'inactive'}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, is_active: e.target.value === 'active' })
+                            }
+                            disabled={u.email === user?.email}
+                          >
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="submit"
+                        className="mab-btn mab-btn-primary mab-btn-sm"
+                        disabled={editSaving}
+                      >
+                        {editSaving ? 'Saving…' : 'Save changes'}
+                      </button>
+                      <button
+                        type="button"
+                        className="mab-btn mab-btn-sm"
+                        onClick={cancelEditUser}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div
+                    key={u.id}
+                    className={`mab-panel flex flex-wrap items-center justify-between gap-3 rounded-lg border border-mab-border px-4 py-3 ${
+                      !u.is_active ? 'opacity-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <div className="text-sm font-medium">
+                          {u.display_name || u.email}
+                          {!u.is_active && (
+                            <span className="ml-2 rounded bg-red-900/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-200">
+                              inactive
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-mab-muted">{u.email}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap gap-1">
+                        {u.roles.map((role) => (
+                          <span
+                            key={role}
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                              role === 'admin'
+                                ? 'bg-[var(--mab-primary)] text-white'
+                                : 'border border-mab-border text-mab-muted'
+                            }`}
+                          >
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="mab-btn mab-btn-sm"
+                        disabled={userBusy === u.id}
+                        onClick={() => startEditUser(u)}
+                      >
+                        Edit
+                      </button>
+                      {u.email !== user?.email && u.is_active && (
+                        <button
+                          type="button"
+                          className="mab-btn mab-btn-danger mab-btn-sm"
+                          disabled={userBusy === u.id}
+                          onClick={() => deactivateUser(u)}
+                        >
+                          {userBusy === u.id ? '…' : 'Deactivate'}
+                        </button>
+                      )}
+                      {u.email !== user?.email && !u.is_active && (
+                        <button
+                          type="button"
+                          className="mab-btn mab-btn-sm"
+                          disabled={userBusy === u.id}
+                          onClick={() => reactivateUser(u)}
+                        >
+                          Reactivate
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              )
+            )}
+          </div>
+        </section>
+      )}
 
       {isAdmin && (
         <section className="mt-10 max-w-3xl">

@@ -24,6 +24,10 @@ class UserRepository(BaseRepository[User]):
         stmt = select(User).where(User.email == email.lower())
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def list_all(self) -> list[User]:
+        stmt = select(User).order_by(User.created_at.desc())
+        return list((await self.session.execute(stmt)).scalars().all())
+
     async def create(
         self,
         *,
